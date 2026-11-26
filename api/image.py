@@ -404,20 +404,33 @@ def add_text(image: Image.Image, quote: dict) -> Image.Image:
     layout = layout_quote(text, bool(ref))
     start_y = int(HEIGHT * 0.605 - layout["block_height"] / 2)
 
-    decoration = Image.new("RGBA", image.size, (0, 0, 0, 0))
-    decoration_draw = ImageDraw.Draw(decoration)
-    decoration_draw.rectangle([WIDTH // 2 - 34, start_y - 58, WIDTH // 2 + 34, start_y - 55], fill=(231, 200, 145, 235))
+    # Рисуем текст в вырезанном регионе, а не на всём холсте — экономит CPU/память.
+    top = max(0, start_y - 150)
+    bottom = min(HEIGHT, start_y + layout["block_height"] + 150)
+    region_height = bottom - top
+    region = image.crop((0, top, WIDTH, bottom)).convert("RGBA")
 
-    shadow = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    decoration = Image.new("RGBA", (WIDTH, region_height), (0, 0, 0, 0))
+    decoration_draw = ImageDraw.Draw(decoration)
+    decoration_draw.rectangle(
+        [WIDTH // 2 - 34, start_y - 58 - top, WIDTH // 2 + 34, start_y - 55 - top],
+        fill=(231, 200, 145, 235),
+    )
+
+    ref_y = start_y + len(layout["lines"]) * layout["line_height"] + int(layout["gap"] * 0.45)
+
+    shadow = Image.new("RGBA", (WIDTH, region_height), (0, 0, 0, 0))
     shadow_draw = ImageDraw.Draw(shadow)
     y = start_y
     for line in layout["lines"]:
-        shadow_draw.text((WIDTH // 2 + 5, y + 6), line, font=layout["font"], fill=(0, 0, 0, 150), anchor="mt")
+        shadow_draw.text(
+            (WIDTH // 2 + 5, y + 6 - top), line, font=layout["font"], fill=(0, 0, 0, 150), anchor="mt"
+        )
         y += layout["line_height"]
     if ref:
         ref_font = ImageFont.truetype(str(FONT_REGULAR_FILE), layout["ref_size"])
         shadow_draw.text(
-            (WIDTH // 2 + 3, y + int(layout["gap"] * 0.45) + 3),
+            (WIDTH // 2 + 3, ref_y + 3 - top),
             f"— {ref}",
             font=ref_font,
             fill=(0, 0, 0, 140),
@@ -425,30 +438,34 @@ def add_text(image: Image.Image, quote: dict) -> Image.Image:
         )
     shadow = shadow.filter(ImageFilter.GaussianBlur(10))
 
-    text_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    text_layer = Image.new("RGBA", (WIDTH, region_height), (0, 0, 0, 0))
     text_draw = ImageDraw.Draw(text_layer)
     y = start_y
     for line in layout["lines"]:
-        text_draw.text((WIDTH // 2, y), line, font=layout["font"], fill=(255, 253, 247, 247), anchor="mt")
+        text_draw.text(
+            (WIDTH // 2, y - top), line, font=layout["font"], fill=(255, 253, 247, 247), anchor="mt"
+        )
         y += layout["line_height"]
     if ref:
         ref_font = ImageFont.truetype(str(FONT_REGULAR_FILE), layout["ref_size"])
         text_draw.text(
-            (WIDTH // 2, y + int(layout["gap"] * 0.45)),
+            (WIDTH // 2, ref_y - top),
             f"— {ref}",
             font=ref_font,
             fill=(236, 226, 206, 205),
             anchor="mt",
         )
 
-    combined = Image.alpha_composite(image.convert("RGBA"), decoration)
+    combined = Image.alpha_composite(region, decoration)
     combined = Image.alpha_composite(combined, shadow)
     combined = Image.alpha_composite(combined, text_layer)
-    return combined.convert("RGB")
+    image.paste(combined.convert("RGB"), (0, top))
+    return image.convert("RGB")
 
 
 def add_grain(image: Image.Image) -> Image.Image:
-    noise = Image.effect_noise((WIDTH, HEIGHT), 12).convert("RGB")
+    image = image.convert("RGB")
+    noise = Image.effect_noise((256, 256), 12).convert("RGB").resize((WIDTH, HEIGHT), Image.Resampling.BILINEAR)
     return Image.blend(image, noise, 0.02)
 
 
