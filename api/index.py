@@ -44,7 +44,7 @@ HTML = """<!doctype html>
 </html>
 """
 
-IMAGE_PATHS = {"/api/image", "/image", "/wallpaper.jpg"}
+IMAGE_PATHS = {"/", "/api", "/api/image", "/image", "/wallpaper.jpg"}
 NO_CACHE = [
     ("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0"),
     ("Pragma", "no-cache"),
@@ -80,7 +80,7 @@ def app(environ, start_response):
         ]
         return _respond(start_response, "200 OK", body if method == "GET" else b"", "image/jpeg", extra)
 
-    if path in ("/", "/index.html"):
+    if path in ("/preview", "/index.html"):
         body = HTML.encode("utf-8")
         return _respond(start_response, "200 OK", body if method == "GET" else b"", "text/html; charset=utf-8")
 
