@@ -1,12 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["fra1"],
-  "rewrites": [{ "source": "/", "destination": "/api" }],
   "functions": {
-    "api/image.py": {
+    "api/index.py": {
       "memory": 1024,
-      "maxDuration": 15,
-      "includeFiles": "{data/**,fonts/**}"
+      "maxDuration": 30,
+      "includeFiles": ["lib/**", "data/**", "fonts/**"]
     }
   }
 }

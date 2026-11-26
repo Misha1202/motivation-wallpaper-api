@@ -5,12 +5,14 @@ from __future__ import annotations
 import os
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import urlparse
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
-from image import emergency_wallpaper, render_wallpaper  # noqa: E402
-from index import HTML  # noqa: E402
+from api.index import HTML  # noqa: E402
+from lib.renderer import emergency_wallpaper, render_wallpaper  # noqa: E402
 
 
 class App(BaseHTTPRequestHandler):

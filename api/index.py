@@ -1,6 +1,20 @@
+"""Единая Vercel-функция (WSGI): /api/image -> JPEG, / -> превью.
+
+Vercel направляет все пути в этот файл, поэтому маршруты разбираем сами.
+Раньше здесь был BaseHTTPRequestHandler, который отвечал HTML на любой путь —
+из-за этого /api/image возвращал страницу вместо картинки.
+"""
+
 from __future__ import annotations
 
-from http.server import BaseHTTPRequestHandler
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from lib.renderer import emergency_wallpaper, render_wallpaper  # noqa: E402
 
 HTML = """<!doctype html>
 <html lang="ru">
@@ -30,16 +44,47 @@ HTML = """<!doctype html>
 </html>
 """
 
+IMAGE_PATHS = {"/api/image", "/image", "/wallpaper.jpg"}
+NO_CACHE = [
+    ("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0"),
+    ("Pragma", "no-cache"),
+]
 
-class handler(BaseHTTPRequestHandler):
-    def do_GET(self) -> None:  # noqa: N802
+
+def _respond(start_response, status: str, body: bytes, content_type: str, extra: list | None = None):
+    headers = [("Content-Type", content_type), ("Content-Length", str(len(body)))]
+    headers += NO_CACHE
+    headers += extra or []
+    start_response(status, headers)
+    return [body]
+
+
+def app(environ, start_response):
+    path = (environ.get("PATH_INFO") or "/").rstrip("/") or "/"
+    method = (environ.get("REQUEST_METHOD") or "GET").upper()
+
+    if method not in ("GET", "HEAD"):
+        return _respond(start_response, "405 Method Not Allowed", b"Method not allowed", "text/plain; charset=utf-8")
+
+    if path in IMAGE_PATHS:
+        try:
+            body = render_wallpaper()
+        except Exception:  # noqa: BLE001
+            import traceback
+
+            traceback.print_exc()
+            body = emergency_wallpaper()
+        extra = [
+            ("Content-Disposition", 'inline; filename="wallpaper.jpg"'),
+            ("Access-Control-Allow-Origin", "*"),
+        ]
+        return _respond(start_response, "200 OK", body if method == "GET" else b"", "image/jpeg", extra)
+
+    if path in ("/", "/index.html"):
         body = HTML.encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        return _respond(start_response, "200 OK", body if method == "GET" else b"", "text/html; charset=utf-8")
 
-    def log_message(self, *args) -> None:
-        pass
+    if path in ("/health", "/healthz"):
+        return _respond(start_response, "200 OK", b"ok", "text/plain; charset=utf-8")
+
+    return _respond(start_response, "404 Not Found", b"Not found", "text/plain; charset=utf-8")
